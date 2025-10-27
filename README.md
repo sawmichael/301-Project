@@ -1,0 +1,1 @@
+In order to get the (CAS) Dataset, as the file is too large to commmit on github. Go on 'project_proposal_Crash_Data.docx' and click on the link to get the dataset from : https://opendata-nzta.opendata.arcgis.com/datasets/NZTA::crash-analysis-system-cas-data-1/about in order to read in in r studio.
