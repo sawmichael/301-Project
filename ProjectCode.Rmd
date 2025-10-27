@@ -1,0 +1,388 @@
+---
+itle: Project Code
+author: "Michael Saw"
+date: "2025-10-22"
+output:
+  html_document: default
+  pdf_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+
+
+```{r}
+library(dplyr) 
+library(ggplot2)
+library(tidyr)
+library(forcats)
+library(psych)
+library(ape)
+library(scales)
+```
+
+
+```{r ReadingIn, echo = FALSE}
+  crash <- read.csv("Crash_Analysis_System_(CAS)_data.csv", stringsAsFactors = TRUE)
+  crash <- crash %>%
+    select(
+      -X,-Y, -OBJECTID, -meshblockId, -tlaId,
+      -crashRoadSideRoad, -intersection, -areaUnitID, -crashLocation1, -crashLocation2, -crashFinancialYear, -crashDirectionDescription, -directionRoleDescription)
+  
+  
+    crash <- crash %>%
+  mutate(
+    streetLight = fct_recode(streetLight, Unknown = "Null"),
+    weatherA = fct_recode(weatherA, Unknown = "Null"),
+    crashSeverity = fct_relevel(crashSeverity,
+      "Fatal Crash", "Serious Crash", "Minor Crash", "Non-Injury Crash"
+    ),
+    streetLight = fct_relevel(streetLight, "On", "Off", "None", "Unknown"),
+    weatherA = fct_relevel(weatherA,
+      "Snow", "Hail or Sleet", "Heavy rain", "Light rain", "Mist or Fog", "Fine", "Unknown"
+    )
+  )
+
+    
+  crash <- crash %>% filter(crashYear <= 2024)
+    
+
+```
+```{r}
+summary(crash$crashYear)
+max(crash$crashYear)
+any(crash$crashYear == 2025)
+```
+```{r}
+summary(crash$crashSeverity)
+```
+
+
+
+```{r ReOdering/Graphing, echo = FALSE}
+Main <- c("crashYear", "crashSeverity", "fatalCount", 
+          "seriousInjuryCount", "minorInjuryCount")
+
+location <- c("region", "tlaName", "urban", "holiday")
+
+condition <- c("speedLimit", "roadSurface", "roadCharacter", "roadLane", 
+               "light", "streetLight", "trafficControl", "weatherA", 
+               "weatherB", "flatHill", "NumberOfLanes",
+               "advisorySpeed", "crashSHDescription", "debris", "temporarySpeedLimit")
+
+vehiclecollison <- c("carStationWagon", "motorcycle", "truck", "bus", "bicycle",
+                     "moped", "suv", "vanOrUtility", "taxi", "schoolBus", 
+                     "otherVehicleType", "unknownVehicleType", "pedestrian")
+
+roadsidecollison <- c("bridge","cliffBank","ditch","fence","guardRail",
+                      "houseOrBuilding","kerb","objectThrownOrDropped",
+                      "otherObject","overBank","parkedVehicle","phoneBoxEtc",
+                      "postOrPole","roadworks","slipOrFlood","strayAnimal",
+                      "trafficIsland","trafficSign","train","tree","vehicle","waterRiver")
+
+crash <- crash %>%
+  select(all_of(Main),
+         all_of(location),
+         all_of(condition),
+         all_of(vehiclecollison),
+         all_of(roadsidecollison))
+```
+
+
+
+
+```{r}
+summary(crash)
+```
+
+
+```{r}
+crash %>%
+  filter(weatherA != "Unknown") %>%        
+  mutate(weatherA = fct_drop(weatherA)) %>%# remove the now-empty level
+  ggplot(aes(x = weatherA, fill = crashSeverity)) +
+  geom_bar(position = "fill") +
+  coord_flip() +
+  scale_fill_manual(
+    values = c(
+      "Fatal Crash" = "grey25",     
+      "Serious Crash" = "grey55",   
+      "Minor Crash" = "grey75",     
+      "Non-Injury Crash" = "grey90"
+    )
+  )+
+  labs(title = "Severity mix by primary weather condition",
+       x = NULL, y = "Proportion", fill = "Crash Severity"
+)+
+  theme_minimal()
+
+
+```
+
+
+```{r}
+crash <- crash %>%
+  mutate(
+    light = fct_relevel(light,
+      "Bright sun", "Overcast", "Twilight", "Dark", "Unknown"
+    )
+  )
+
+```
+```{r}
+levels(crash$light)
+
+```
+
+
+
+```{r, echo=FALSE, fig.width=7, fig.height=5, fig.align="center"}
+crash %>%
+  filter(light != "Unknown") %>%
+  mutate(light = fct_drop(light)) %>%
+  ggplot(aes(x = light, fill = crashSeverity)) +
+  geom_bar(position = "fill") +
+  coord_flip() +
+  scale_fill_manual(
+    values = c(
+      "Fatal Crash" = "grey25",     
+      "Serious Crash" = "grey55",   
+      "Minor Crash" = "grey75",     
+      "Non-Injury Crash" = "grey90" 
+    )
+  ) +
+  labs(
+    title = "Crash Severity by Natural Light Conditions",
+    x = NULL,
+    y = "Proportion",
+    fill = "Crash Severity"
+  ) +
+  theme_minimal()
+  
+
+
+
+```
+
+
+
+
+```{r, echo=FALSE, fig.width=7, fig.height=5, fig.align="center"}
+crash %>%
+  group_by(crashYear) %>%
+  summarise(
+    Fatal   = sum(fatalCount, na.rm = TRUE),
+    Serious = sum(seriousInjuryCount, na.rm = TRUE),
+    Minor   = sum(minorInjuryCount, na.rm = TRUE)
+  ) %>%
+  pivot_longer(-crashYear, names_to = "injury", values_to = "count") %>%
+  mutate(injury = factor(injury, levels = c("Fatal", "Serious", "Minor"))) %>%
+  ggplot(aes(crashYear, count, fill = injury)) +
+  geom_col() +
+  scale_fill_manual(
+    values = c(
+      "Fatal" = "grey25",
+      "Serious" = "grey55",
+      "Minor" = "grey80"
+    )
+  ) +
+  labs(
+    title = "Injury counts per year",
+    x = "Year",
+    y = "Count",
+    fill = "Injury Severity"
+  )+
+  theme_minimal()
+```
+```{r}
+injury_trend <- crash %>%
+  filter(crashSeverity != "Non-Injury Crash") %>%
+  group_by(crashYear) %>%
+  summarise(total_injuries = n(), .groups = "drop")
+
+ggplot(injury_trend, aes(x = crashYear, y = total_injuries)) +
+  geom_line(size = 1, linetype = "solid", color = "grey") +
+  geom_point(size = 1.5, color = "grey55") +
+  labs(
+    title = "Total Injury Crashes per Year (2000–2024)",
+    x = "Year",
+    y = "Number of Injury Crashes"
+  ) +
+  theme_minimal()
+```
+
+
+
+
+
+
+
+
+```{r}
+library(dplyr)
+library(stringr)
+
+subset_crash <- crash %>%
+  select(crashSeverity, streetLight, weatherA, crashYear, light)
+
+subset_crash <- subset_crash %>%
+    filter(weatherA != "Unknown", light != "Unknown") %>%
+  mutate(
+    CrashSeverityBinary = case_when(
+      crashSeverity %in% c("Non-Injury Crash", "Minor Crash") ~ "Low",
+      crashSeverity %in% c("Serious Crash", "Fatal Crash") ~ "High"
+    ),
+    CrashSeverityBinary = factor(CrashSeverityBinary, levels = c("Low", "High"))
+  )
+```   
+
+```{r}
+summary(subset_crash)
+```
+```{r}
+summary(subset_crash$light)
+
+```
+
+```{r}
+library(knitr)
+streetlight_table <- subset_crash %>%
+  count(streetLight, CrashSeverityBinary) %>%
+  pivot_wider(
+    names_from = CrashSeverityBinary,
+    values_from = n,
+    values_fill = 0
+  ) %>%
+  mutate(Total = Low + High)
+streetlight_table %>%
+  mutate(
+    High_Percent = round((High / Total) * 100, 1)
+  ) %>%
+  kable(
+    caption = "Crash Severity Counts and High-Severity Proportion by Street Light Condition",
+    align = c("l", "r", "r", "r", "r"),
+    col.names = c("Street Light Condition", "Low", "High", "Total", "High (%)")
+  )
+
+```
+```{r}
+class(subset_crash$streetLight)
+class(subset_crash$weatherA)
+class(subset_crash$light)
+```
+
+
+```{r}
+#data manipulation 
+subset_crash_collapsed <- subset_crash %>%
+  filter(streetLight != "Unknown") %>%  
+  mutate(
+    light = fct_collapse(
+      light,
+      "Daylight" = c("Bright sun", "Overcast"),
+      "Night"    = c("Twilight", "Dark"),
+    ),
+    weatherA = fct_collapse(
+      weatherA,
+      "Snow/Hail"      = c("Snow", "Hail or Sleet"),
+      "Rain"           = c("Light rain", "Heavy rain"),
+      "LowVisibility"  = c("Mist or Fog"),
+    ) 
+  ) %>%
+  mutate(
+      weatherA = fct_relevel(weatherA, "Fine", "LowVisibility", "Rain", "Snow/Hail")
+)
+
+summary(subset_crash_collapsed)
+```
+
+
+
+```{r}
+#creating a binary logistic regression model 
+modeltest <- glm(
+  CrashSeverityBinary ~ streetLight * light + weatherA,
+  data = subset_crash_collapsed,
+  family = binomial(link = "logit"),
+)
+summary(modeltest)
+```
+```{r}
+summary(crash$streetLight)
+summary(crash$weatherA)
+summary(crash$light)
+```
+```{r}
+summary(subset_crash_collapsed$streetLight)
+summary(subset_crash$weatherA)
+summary(subset_crash$light)
+```
+```{r}
+levels(subset_crash_collapsed$CrashSeverityBinary)
+
+```
+
+
+
+```{r}
+library(ggplot2)
+library(dplyr)
+
+newdata <- expand.grid(
+  streetLight = unique(subset_crash_collapsed$streetLight),
+  light = unique(subset_crash_collapsed$light),
+  weatherA = "Fine"
+)
+
+newdata$predicted <- predict(modeltest, newdata, type = "response")
+
+# Plot
+ggplot(newdata, aes(x = streetLight, y = predicted, fill = light)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  scale_fill_grey(start = 0.3, end = 0.8) +
+  labs(
+    title = "Predicted Probability of High Crash Severity",
+    y = "Predicted Probability",
+    x = "Street Lighting Condition"
+  ) +
+  theme_minimal()
+
+```
+
+
+
+```{r}
+exp(coef(modeltest))
+```
+
+
+```{r}
+exp(confint(modeltest))
+
+```
+
+```{r}
+#producing a roc curve
+library(pROC)
+
+roc_curve <- roc(subset_crash_collapsed$CrashSeverityBinary, fitted(modeltest))
+auc_value <- auc(roc_curve)
+
+plot(smooth(roc_curve), col = "black", lwd = 3, lty = 1,
+     main = "ROC Curve for High-Severity Crash Model")
+abline(a = 0, b = 1, lty = 3, col = "grey60")
+
+
+
+
+```
+
+
